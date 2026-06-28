@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="fr" class="dark h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cosmos Journal Pro — Tableau de bord de trading</title>
+    <style id="extra-styles">
+        /* Lightbox */
+        #lightbox { display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.92); align-items:center; justify-content:center; }
+        #lightbox.open { display:flex; }
+        #lightbox img { max-width:92vw; max-height:88vh; border-radius:12px; object-fit:contain; box-shadow:0 0 60px rgba(0,0,0,.8); }
+        #lightbox-label { position:fixed; bottom:28px; left:50%; transform:translateX(-50%); font-size:11px; color:#71717a; letter-spacing:.04em; }
+        
+        /* Risk slider */
+        input[type=range].risk-slider { -webkit-appearance:none; width:100%; height:4px; background:#27272a; border-radius:4px; outline:none; }
+        input[type=range].risk-slider::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px; border-radius:50%; background:#10b981; cursor:pointer; border:2px solid #09090b; box-shadow:0 0 0 2px rgba(16,185,129,.3); }
+        input[type=range].risk-slider::-webkit-slider-runnable-track { border-radius:4px; }
+
+        /* Settings panel */
+        #settings-panel { display:none; position:fixed; inset:0; z-index:9000; background:rgba(0,0,0,.75); backdrop-filter:blur(6px); align-items:center; justify-content:center; }
+        #settings-panel.open { display:flex; }
+        .settings-tag { display:inline-flex; align-items:center; gap:4px; padding:3px 8px; border-radius:6px; font-size:10px; background:#27272a; color:#d4d4d8; border:1px solid #3f3f46; cursor:default; }
+        .settings-tag .rm { cursor:pointer; color:#71717a; font-size:9px; padding:0 2px; transition:.15s; }
+        .settings-tag .rm:hover { color:#f43f5e; }
+        .add-option-row { display:flex; gap:6px; }
+        .add-option-row input { flex:1; background:#09090b; border:1px solid #27272a; border-radius:8px; padding:6px 10px; font-size:11px; color:#e4e4e7; outline:none; }
+        .add-option-row input:focus { border-color:#52525b; }
+        .add-option-row button { padding:6px 12px; background:#27272a; border:none; border-radius:8px; color:#e4e4e7; font-size:11px; cursor:pointer; transition:.15s; }
+        .add-option-row button:hover { background:#3f3f46; }
+
+        /* Media upload zones */
+        .media-zone { border:1.5px dashed #27272a; border-radius:10px; padding:10px; text-align:center; cursor:pointer; transition:.2s; position:relative; min-height:54px; display:flex; align-items:center; justify-content:center; }
+        .media-zone:hover { border-color:#52525b; background:rgba(255,255,255,.02); }
+        .media-zone.has-img { border-color:#3f3f46; padding:4px; }
+        .media-zone img { width:100%; height:80px; object-fit:cover; border-radius:7px; display:block; }
+        .media-zone input[type=file] { position:absolute; inset:0; opacity:0; cursor:pointer; width:100%; height:100%; }
+        .media-overlay { position:absolute; inset:0; background:rgba(0,0,0,.55); border-radius:7px; display:none; align-items:center; justify-content:center; font-size:18px; border-radius:7px; }
+        .media-zone.has-img:hover .media-overlay { display:flex; }
+
+        /* Fade-in animation for new trades */
+        @keyframes fadeSlideIn { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+        .trade-row-new { animation: fadeSlideIn .3s ease both; }
+    </style>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        zinc: {
+                            950: '#09090b',
+                            900: '#18181b',
+                            800: '#27272a',
+                            700: '#3f3f46',
+                            600: '#52525b',
+                        },
+                        emerald: {
+                            500: '#10b981',
+                            400: '#34d399',
+                            600: '#059669',
+                            950: '#022c22'
+                        },
+                        rose: {
+                            500: '#f43f5e',
+                            400: '#fb7185',
+                            600: '#e11d48',
+                            950: '#4c0519'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Geist Sans', 'SF Pro Display', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Geist', sans-serif;
+            background-color: #09090b;
+            color: #f4f4f5;
+        }
+
+        /* Custom scrollbar for a cleaner premium look */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #09090b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3f3f46;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col antialiased selection:bg-zinc-800 selection:text-white">
+
+    <!-- TOP HEADER BAR -->
+    <header class="border-b border-zinc-800/80 bg-zinc-950/50 backdrop-blur-md sticky top-0 z-40 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-500/10">
+                <span class="text-white font-bold text-sm">🌌</span>
+            </div>
+            <div>
+                <h1 class="text-md font-semibold tracking-tight text-zinc-100 flex items-center gap-2">
+                    Cosmos Journal Pro <span class="text-[10px] font-mono py-0.5 px-1.5 rounded bg-zinc-800 text-zinc-400">v2.0</span>
+                </h1>
+                <p class="text-[11px] text-zinc-400">Système de tracking du comportement et du delta émotionnel</p>
+            </div>
+        </div>
+
+        <div class="flex items-center space-x-3">
+            <button onclick="openSettings()" class="text-xs px-3 py-1.5 rounded-lg border border-zinc-700 text-zinc-300 hover:text-white hover:bg-zinc-800 transition duration-200 flex items-center gap-1.5">
+                ⚙️ Paramètres
+            </button>
+            <button onclick="injectDemoData()" class="text-xs px-3 py-1.5 rounded-lg border border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition duration-200">
+                ⚡ Injecter démo
+            </button>
+            <button onclick="openExportModal()" class="text-xs px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition duration-200 flex items-center gap-1.5">
+                📦 Export pour Cosmos IA
+            </button>
+            <button onclick="clearAllData()" class="text-xs px-3 py-1.5 rounded-lg border border-rose-950/50 text-rose-400/80 hover:bg-rose-950/30 transition duration-200">
+                Réinitialiser
+            </button>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 overflow-y-auto">
+        
+        <!-- DASHBOARD STATS / THE DELTA ENGINE -->
+        <section class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <!-- P&L Réel -->
+            <div class="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-emerald-500/80"></div>
+                <p class="text-xs font-medium text-zinc-400 uppercase tracking-wider">P&L Réel Total</p>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="stat-real-pl" class="text-3xl font-semibold tracking-tight text-emerald-400">+0.00%</span>
+                </div>
+                <p class="text-[11px] text-zinc-500 mt-1">Avec prises de partiels et coupures à 50% du SL</p>
+            </div>
+
+            <!-- P&L Théorique -->
+            <div class="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 relative overflow-hidden">
+                <div class="absolute top-0 left-0 w-1 h-full bg-zinc-700"></div>
+                <p class="text-xs font-medium text-zinc-400 uppercase tracking-wider">P&L Théorique Total</p>
+                <div class="mt-2 flex items-baseline gap-2">
+                    <span id="stat-theo-pl" class="text-3xl font-semibold tracking-tight text-zinc-300">+0.00%</span>
+                </div>
+                <p class="text-[11px] text-zinc-500 mt-1">Si approche passive pure (Set & Forget)</p>
+            </div>
+
+            <!-- Delta Émotionnel -->
+            <div id="card-delta" class="bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 relative overflow-hidden md:col-span-2">
+                <div id="delta-bar" class="absolute top-0 left-0 w-1 h-full bg-zinc-600"></div>
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="text-xs font-medium text-zinc-400 uppercase tracking-wider">Delta comportemental (Le coût de la peur)</p>
+                        <div class="mt-2 flex items-baseline gap-2">
+                            <span id="stat-delta" class="text-3xl font-semibold tracking-tight text-zinc-300">0.00%</span>
+                        </div>
+                    </div>
+                    <span id="delta-emoji" class="text-2xl">⚖️</span>
+                </div>
+                <p id="delta-tip" class="text-[11px] text-zinc-400 mt-1.5">Configurez vos trades pour évaluer l'impact financier net de vos décisions.</p>
+            </div>
+        </section>
+
+        <!-- MAIN LAYOUT: TWO COLUMNS (FORM & LIST) -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <!-- FORMULAIRE DE SAISIE UNIFIÉ (5 COLUMNS) -->
+            <section class="lg:col-span-5 bg-zinc-900/20 border border-zinc-800/60 rounded-2xl p-6 space-y-6">
+                <div>
+                    <h2 class="text-base font-medium text-zinc-100">Nouveau Trade</h2>
+                    <p class="text-xs text-zinc-400">Enregistrement chirurgical sans saisie superflue</p>
+                </div>
+
+                <form id="trade-form" onsubmit="handleFormSubmit(event)" class="space-y-5">
+                    <!-- ACTIFS / TOOGLE -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-medium text-zinc-400">Actif financier</label>
+                        <div class="grid grid-cols-4 gap-1.5" id="asset-selector">
+                            <!-- Généré dynamiquement par renderAssetButtons() -->
+                        </div>
+                        <input type="hidden" id="field-asset" required>
+                    </div>
+
+                    <!-- STRATÉGIE -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-medium text-zinc-400">Stratégie appliquée</label>
+                        <div class="grid grid-cols-2 gap-2" id="strategy-selector">
+                            <!-- Généré dynamiquement par renderStrategyButtons() -->
+                        </div>
+                        <input type="hidden" id="field-strategy" required>
+                    </div>
+
+                    <!-- SESSION & UNITÉ DE TEMPS (U.T) -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-xs font-medium text-zinc-400">Session de marché</label>
+                            <div class="grid grid-cols-3 gap-1" id="session-selector">
+                                <!-- Généré dynamiquement -->
+                            </div>
+                            <input type="hidden" id="field-session" required>
+                        </div>
+
+                        <div class="space-y-2">
+                            <label class="text-xs font-medium text-zinc-400">Unité de Temps (Exécution)</label>
+                            <div class="grid grid-cols-3 gap-1" id="ut-selector">
+                                <!-- Généré dynamiquement -->
+                            </div>
+                            <input type="hidden" id="field-ut" required>
+                        </div>
+                    </div>
+
+                    <!-- GESTION ACTIVE : EXÉCUTION RÉELLE -->
+                    <div class="space-y-2 pt-2 border-t border-zinc-800/60">
+                        <!-- RISQUE DYNAMIQUE -->
+                        <div class="bg-zinc-950/60 border border-zinc-800/60 rounded-xl p-3 space-y-2">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-zinc-400 flex items-center gap-1.5">🎯 Risque par trade</span>
+                                <span id="risk-display" class="text-xs font-mono font-semibold text-emerald-400">0.25%</span>
+                            </div>
+                            <input type="range" id="risk-slider" class="risk-slider" min="25" max="100" step="25" value="25"
+                                oninput="updateRisk(this.value)">
+                            <div class="flex justify-between text-[9px] text-zinc-600 font-mono">
+                                <span>0.25%</span><span>0.50%</span><span>0.75%</span><span>1.00%</span>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between">
+                            <label class="text-xs font-medium text-zinc-400">Exécution Réelle (Ce que tu as fait)</label>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2" id="real-selector">
+                            <button type="button" onclick="selectReal('TP Max')" class="real-btn p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/40 hover:border-emerald-500/30 text-left transition">
+                                <span class="text-xs font-medium block text-zinc-200">🎯 TP Max (RR 2)</span>
+                                <span id="lbl-tp" class="text-[9px] text-emerald-400 font-mono">+0.50%</span>
+                            </button>
+                            <button type="button" onclick="selectReal('Partiel + BE')" class="real-btn p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/40 hover:border-emerald-500/30 text-left transition">
+                                <span class="text-xs font-medium block text-zinc-200">🛡️ Partiel RR 1 + BE</span>
+                                <span id="lbl-partiel" class="text-[9px] text-emerald-500/80 font-mono">+0.125%</span>
+                            </button>
+                            <button type="button" onclick="selectReal('Moitié SL')" class="real-btn p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/40 hover:border-rose-500/30 text-left transition">
+                                <span class="text-xs font-medium block text-zinc-200">📉 Coupure Mi-SL</span>
+                                <span id="lbl-halfsl" class="text-[9px] text-rose-400 font-mono">-0.125%</span>
+                            </button>
+                            <button type="button" onclick="selectReal('Full SL')" class="real-btn p-2.5 rounded-xl border border-zinc-800 bg-zinc-950/40 hover:border-rose-500/30 text-left transition">
+                                <span class="text-xs font-medium block text-zinc-200">💥 Full SL</span>
+                                <span id="lbl-fullsl" class="text-[9px] text-rose-500/80 font-mono">-0.25%</span>
+                            </button>
+                        </div>
+                        <input type="hidden" id="field-real" required>
+                    </div>
+
+                    <!-- SCÉNARIO THÉORIQUE DE REFERENCE -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-medium text-zinc-400">Scénario Théorique (Ce que le marché a fait)</label>
+                        <div class="grid grid-cols-2 gap-2" id="theo-selector">
+                            <button type="button" onclick="selectTheo('TP')" class="theo-btn py-2 text-xs rounded-xl border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-zinc-700 transition">
+                                🟢 Touché TP (<span class="lbl-theo-tp">+0.50%</span>)
+                            </button>
+                            <button type="button" onclick="selectTheo('SL')" class="theo-btn py-2 text-xs rounded-xl border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-zinc-700 transition">
+                                🔴 Touché SL (<span class="lbl-theo-sl">-0.25%</span>)
+                            </button>
+                        </div>
+                        <input type="hidden" id="field-theo" required>
+                    </div>
+
+                    <!-- CAPTURES D'ÉCRAN (MEDIA UPLOAD) -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-medium text-zinc-400">Captures du trade <span class="text-zinc-600">(optionnel)</span></label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <p class="text-[9px] text-zinc-500 mb-1 uppercase tracking-wider">HTF — Vue macro</p>
+                                <div class="media-zone" id="zone-htf" onclick="triggerUpload('upload-htf')">
+                                    <input type="file" id="upload-htf" accept="image/*" onchange="handleImageUpload(event,'htf')" onclick="event.stopPropagation()">
+                                    <span class="text-[10px] text-zinc-500 pointer-events-none" id="zone-htf-placeholder">📸 Glisser / cliquer</span>
+                                    <div class="media-overlay" id="overlay-htf">🔍</div>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-[9px] text-zinc-500 mb-1 uppercase tracking-wider">LTF — Entrée précise</p>
+                                <div class="media-zone" id="zone-ltf" onclick="triggerUpload('upload-ltf')">
+                                    <input type="file" id="upload-ltf" accept="image/*" onchange="handleImageUpload(event,'ltf')" onclick="event.stopPropagation()">
+                                    <span class="text-[10px] text-zinc-500 pointer-events-none" id="zone-ltf-placeholder">📸 Glisser / cliquer</span>
+                                    <div class="media-overlay" id="overlay-ltf">🔍</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- TEXTAREA NOTES -->
+                    <div class="space-y-2">
+                        <label class="text-xs font-medium text-zinc-400">Notes comportementales</label>
+                        <textarea id="field-notes" rows="2" class="w-full rounded-xl bg-zinc-950/50 border border-zinc-800 px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:ring-1 focus:ring-zinc-700 focus:border-zinc-700" placeholder="Ressenti, frustration, ou remarque sur l'entrée sniper..."></textarea>
+                    </div>
+
+                    <button type="submit" class="w-full bg-zinc-100 hover:bg-white text-zinc-950 font-medium py-3 rounded-xl transition-all shadow-md shadow-white/5 text-sm">
+                        Enregistrer le Trade
+                    </button>
+                </form>
+            </section>
+
+            <!-- HISTORIQUE DES TRADES (7 COLUMNS) -->
+            <section class="lg:col-span-7 space-y-4 flex flex-col">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h2 class="text-base font-medium text-zinc-100">Registre comportemental</h2>
+                        <p class="text-xs text-zinc-400">Suivi et comparaison des écarts mathématiques</p>
+                    </div>
+                    <span id="trade-count" class="text-xs bg-zinc-900 border border-zinc-800 px-2 py-1 rounded text-zinc-400">0 trade enregistré</span>
+                </div>
+
+                <!-- TABLE DES TRADES -->
+                <div class="border border-zinc-800/60 rounded-2xl bg-zinc-900/10 overflow-hidden flex-1 flex flex-col">
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-zinc-800/80">
+                            <thead class="bg-zinc-950/40">
+                                <tr>
+                                    <th scope="col" class="px-4 py-3 text-left text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Actif / Date</th>
+                                    <th scope="col" class="px-4 py-3 text-left text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Stratégie / UT</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Réel</th>
+                                    <th scope="col" class="px-4 py-3 text-center text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Théorie</th>
+                                    <th scope="col" class="px-4 py-3 text-right text-[11px] font-medium text-zinc-400 uppercase tracking-wider">Delta</th>
+                                    <th scope="col" class="px-4 py-3 text-right text-[11px] font-medium text-zinc-400 uppercase tracking-wider"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="trades-list" class="divide-y divide-zinc-800/50">
+                                <!-- Dynamically generated -->
+                                <tr>
+                                    <td colspan="6" class="px-4 py-12 text-center text-zinc-500 text-xs">
+                                        Aucun trade pour le moment. Remplissez le formulaire ou injectez de la démo.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- EXPORT MODAL -->
+    <div id="export-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+        <div class="bg-zinc-900 border border-zinc-800 w-full max-w-2xl rounded-2xl p-6 flex flex-col max-h-[90vh]">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h3 class="text-base font-medium text-zinc-100">Rapport de Synthèse d'Audit Comportemental</h3>
+                    <p class="text-xs text-zinc-400">Copie ce document complet pour le donner à Cosmos Trader Pro</p>
+                </div>
+                <button onclick="closeExportModal()" class="text-zinc-500 hover:text-zinc-300 text-sm">✕</button>
+            </div>
+            
+            <textarea id="export-text" readonly class="flex-1 w-full bg-zinc-950 border border-zinc-800/80 rounded-xl p-4 font-mono text-[11px] leading-relaxed text-zinc-300 resize-none h-96 focus:outline-none"></textarea>
+            
+            <div class="mt-4 flex justify-between items-center">
+                <p class="text-[10px] text-zinc-500">Ce condensé structuré inclut les ratios de réussite et le coût financier de la peur.</p>
+                <div class="space-x-2">
+                    <button onclick="copyToClipboard()" class="bg-zinc-200 hover:bg-white text-zinc-950 font-medium px-4 py-2 rounded-xl text-xs transition">
+                        Copier dans le presse-papiers
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LIGHTBOX -->
+    <div id="lightbox" onclick="closeLightbox()">
+        <img id="lightbox-img" src="" alt="Capture du trade">
+        <div id="lightbox-label"></div>
+    </div>
+
+    <!-- SETTINGS PANEL -->
+    <div id="settings-panel" onclick="handleSettingsOverlayClick(event)">
+        <div class="bg-zinc-900 border border-zinc-800 rounded-2xl p-6 w-full max-w-lg max-h-[85vh] overflow-y-auto space-y-6" onclick="event.stopPropagation()">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h3 class="text-sm font-semibold text-zinc-100">Paramètres & Favoris</h3>
+                    <p class="text-[11px] text-zinc-500 mt-0.5">Personnalise tes options par défaut</p>
+                </div>
+                <button onclick="closeSettings()" class="text-zinc-500 hover:text-zinc-200 text-lg leading-none">✕</button>
+            </div>
+
+            <!-- Actifs -->
+            <div class="space-y-2">
+                <label class="text-xs font-medium text-zinc-300 uppercase tracking-wider">Actifs financiers</label>
+                <div id="settings-assets" class="flex flex-wrap gap-2 min-h-[28px]"></div>
+                <div class="add-option-row">
+                    <input id="new-asset" type="text" placeholder="Ex: NAS100, ETH/USD…" maxlength="12">
+                    <button onclick="addOption('assets','new-asset')">+ Ajouter</button>
+                </div>
+            </div>
+
+            <!-- Stratégies -->
+            <div class="space-y-2">
+                <label class="text-xs font-medium text-zinc-300 uppercase tracking-wider">Stratégies</label>
+                <div id="settings-strategies" class="flex flex-wrap gap-2 min-h-[28px]"></div>
+                <div class="add-option-row">
+                    <input id="new-strategy" type="text" placeholder="Ex: Strat 3 - FVG/MSS…" maxlength="30">
+                    <button onclick="addOption('strategies','new-strategy')">+ Ajouter</button>
+                </div>
+            </div>
+
+            <!-- Sessions -->
+            <div class="space-y-2">
+                <label class="text-xs font-medium text-zinc-300 uppercase tracking-wider">Sessions de marché</label>
+                <div id="settings-sessions" class="flex flex-wrap gap-2 min-h-[28px]"></div>
+                <div class="add-option-row">
+                    <input id="new-session" type="text" placeholder="Ex: Overlap, Pré-NY…" maxlength="16">
+                    <button onclick="addOption('sessions','new-session')">+ Ajouter</button>
+                </div>
+            </div>
+
+            <!-- Unités de temps -->
+            <div class="space-y-2">
+                <label class="text-xs font-medium text-zinc-300 uppercase tracking-wider">Unités de Temps</label>
+                <div id="settings-uts" class="flex flex-wrap gap-2 min-h-[28px]"></div>
+                <div class="add-option-row">
+                    <input id="new-ut" type="text" placeholder="Ex: 5M, 2H, Weekly…" maxlength="8">
+                    <button onclick="addOption('uts','new-ut')">+ Ajouter</button>
+                </div>
+            </div>
+
+            <button onclick="closeSettings()" class="w-full py-2.5 bg-zinc-100 hover:bg-white text-zinc-950 text-xs font-medium rounded-xl transition">
+                Enregistrer et fermer
+            </button>
+        </div>
+    </div>
+
+    <!-- CORE JAVASCRIPT LOGIC -->
+    <script>
+        // ─── STATE ────────────────────────────────────────────────────────────
+        let trades = [];
+        let currentRisk = 0.25; // en %
+        let pendingHTF = null;  // base64
+        let pendingLTF = null;  // base64
+
+        // Paramètres par défaut (favoris Cosmos)
+        const DEFAULTS = {
+            assets:     ['EUR/USD','GBP/USD','XAU/USD','BTC/USD'],
+            strategies: ['Strat 1 - OB/BPR','Strat 2 - OB/POC/LIQ'],
+            sessions:   ['Londres','New York','Asie'],
+            uts:        ['1H','30M','15M']
+        };
+
+        let prefs = loadPrefs();
+
+        function loadPrefs() {
+            const saved = localStorage.getItem('cosmos_prefs');
+            if (saved) return JSON.parse(saved);
+            return JSON.parse(JSON.stringify(DEFAULTS));
+        }
+
+        function savePrefs() {
+            localStorage.setItem('cosmos_prefs', JSON.stringify(prefs));
+        }
+
+        // ─── INIT ─────────────────────────────────────────────────────────────
+        window.onload = function() {
+            if (localStorage.getItem('cosmos_trades')) {
+                trades = JSON.parse(localStorage.getItem('cosmos_trades'));
+            }
+            renderAllSelectors();
+            updateUI();
+        }
+
+        // ─── RENDER SELECTORS (dynamique) ────────────────────────────────────
+        function renderAllSelectors() {
+            renderAssetButtons();
+            renderStrategyButtons();
+            renderSessionButtons();
+            renderUTButtons();
+        }
+
+        function renderAssetButtons() {
+            const c = document.getElementById('asset-selector');
+            c.innerHTML = prefs.assets.map(a =>
+                `<button type="button" onclick="selectAsset('${a}')" class="asset-btn py-2 text-xs rounded-lg border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-zinc-700 transition font-mono">${a.replace('/','')}</button>`
+            ).join('');
+        }
+
+        function renderStrategyButtons() {
+            const c = document.getElementById('strategy-selector');
+            c.innerHTML = prefs.strategies.map((s, i) =>
+                `<button type="button" onclick="selectStrategy('${s}')" class="strat-btn text-left p-3 rounded-xl border border-zinc-800 bg-zinc-950/40 hover:border-zinc-700 transition">
+                    <p class="text-xs font-semibold text-zinc-200">${s}</p>
+                </button>`
+            ).join('');
+        }
+
+        function renderSessionButtons() {
+            const c = document.getElementById('session-selector');
+            const labels = {Londres:'LDN','New York':'NY',Asie:'ASIA'};
+            c.innerHTML = prefs.sessions.map(s =>
+                `<button type="button" onclick="selectSession('${s}')" class="session-btn py-1.5 text-[11px] rounded-lg border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-zinc-700 transition">${labels[s]||s}</button>`
+            ).join('');
+        }
+
+        function renderUTButtons() {
+            const c = document.getElementById('ut-selector');
+            c.innerHTML = prefs.uts.map(u =>
+                `<button type="button" onclick="selectUT('${u}')" class="ut-btn py-1.5 text-[11px] rounded-lg border border-zinc-800 bg-zinc-950/40 text-zinc-300 hover:border-zinc-700 transition font-mono">${u}</button>`
+            ).join('');
+        }
+
+        // ─── RISQUE DYNAMIQUE ─────────────────────────────────────────────────
+        function updateRisk(sliderVal) {
+            currentRisk = parseFloat(sliderVal) / 100;
+            const r = currentRisk;
+            document.getElementById('risk-display').textContent = r.toFixed(2) + '%';
+            document.getElementById('lbl-tp').textContent      = '+' + (r * 2).toFixed(3) + '%';
+            document.getElementById('lbl-partiel').textContent = '+' + (r * 0.5).toFixed(3) + '%';
+            document.getElementById('lbl-halfsl').textContent  = '-' + (r * 0.5).toFixed(3) + '%';
+            document.getElementById('lbl-fullsl').textContent  = '-' + r.toFixed(3) + '%';
+            document.querySelectorAll('.lbl-theo-tp').forEach(el => el.textContent = '+' + (r * 2).toFixed(3) + '%');
+            document.querySelectorAll('.lbl-theo-sl').forEach(el => el.textContent = '-' + r.toFixed(3) + '%');
+        }
+
+        function getRealPL(outcome) {
+            const r = currentRisk;
+            switch(outcome) {
+                case 'TP Max':      return r * 2;
+                case 'Partiel + BE':return r * 0.5;
+                case 'Moitié SL':   return -(r * 0.5);
+                case 'Full SL':     return -r;
+                default: return 0;
+            }
+        }
+
+        function getTheoPL(outcome) {
+            return outcome === 'TP' ? currentRisk * 2 : -currentRisk;
+        }
+
+        // ─── MEDIA UPLOAD ─────────────────────────────────────────────────────
+        function triggerUpload(inputId) {
+            document.getElementById(inputId).click();
+        }
+
+        function handleImageUpload(event, type) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const b64 = e.target.result;
+                const zoneId = 'zone-' + type;
+                const zone = document.getElementById(zoneId);
+                const placeholder = document.getElementById(zoneId + '-placeholder');
+                // Remove old img if present
+                const oldImg = zone.querySelector('img.preview-img');
+                if (oldImg) oldImg.remove();
+                // Create preview
+                const img = document.createElement('img');
+                img.src = b64;
+                img.className = 'preview-img';
+                img.onclick = function(ev) {
+                    ev.stopPropagation();
+                    openLightbox(b64, type === 'htf' ? 'Vue HTF — Macro' : 'Vue LTF — Entrée précise');
+                };
+                zone.appendChild(img);
+                zone.classList.add('has-img');
+                if (placeholder) placeholder.style.display = 'none';
+                if (type === 'htf') pendingHTF = b64;
+                else pendingLTF = b64;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function openLightbox(src, label) {
+            document.getElementById('lightbox-img').src = src;
+            document.getElementById('lightbox-label').textContent = label || '';
+            document.getElementById('lightbox').classList.add('open');
+        }
+
+        function closeLightbox() {
+            document.getElementById('lightbox').classList.remove('open');
+        }
+
+        // ─── SETTINGS PANEL ───────────────────────────────────────────────────
+        function openSettings() {
+            renderSettingsTags();
+            document.getElementById('settings-panel').classList.add('open');
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('open');
+            savePrefs();
+            renderAllSelectors();
+            updateUI();
+        }
+
+        function handleSettingsOverlayClick(e) {
+            if (e.target === document.getElementById('settings-panel')) closeSettings();
+        }
+
+        function renderSettingsTags() {
+            const map = {
+                assets: 'settings-assets',
+                strategies: 'settings-strategies',
+                sessions: 'settings-sessions',
+                uts: 'settings-uts'
+            };
+            for (const [key, containerId] of Object.entries(map)) {
+                const c = document.getElementById(containerId);
+                c.innerHTML = prefs[key].map((v, i) =>
+                    `<span class="settings-tag">${v}<span class="rm" onclick="removeOption('${key}',${i})">✕</span></span>`
+                ).join('');
+            }
+        }
+
+        function addOption(key, inputId) {
+            const input = document.getElementById(inputId);
+            const val = input.value.trim();
+            if (!val) return;
+            if (!prefs[key].includes(val)) {
+                prefs[key].push(val);
+                renderSettingsTags();
+            }
+            input.value = '';
+        }
+
+        function removeOption(key, index) {
+            if (prefs[key].length <= 1) return; // Garder au moins 1
+            prefs[key].splice(index, 1);
+            renderSettingsTags();
+        }
+
+        // ─── FORM SELECTION HELPERS ───────────────────────────────────────────
+        function clearSelection(selectorClass) {
+            document.querySelectorAll(selectorClass).forEach(el => {
+                el.classList.remove('border-zinc-300', 'bg-zinc-800', 'border-emerald-500', 'border-rose-500', 'text-white');
+                el.classList.add('border-zinc-800', 'bg-zinc-950/40', 'text-zinc-300');
+            });
+        }
+
+        function selectAsset(asset) {
+            clearSelection('.asset-btn');
+            document.getElementById('field-asset').value = asset;
+            event.target.classList.remove('border-zinc-800', 'bg-zinc-950/40', 'text-zinc-300');
+            event.target.classList.add('border-zinc-300', 'bg-zinc-800', 'text-white');
+        }
+
+        function selectStrategy(strategy) {
+            clearSelection('.strat-btn');
+            document.getElementById('field-strategy').value = strategy;
+            event.target.closest('button').classList.remove('border-zinc-800', 'bg-zinc-950/40');
+            event.target.closest('button').classList.add('border-zinc-300', 'bg-zinc-800/20');
+        }
+
+        function selectSession(session) {
+            clearSelection('.session-btn');
+            document.getElementById('field-session').value = session;
+            event.target.classList.remove('border-zinc-800', 'bg-zinc-950/40', 'text-zinc-300');
+            event.target.classList.add('border-zinc-300', 'bg-zinc-800', 'text-white');
+        }
+
+        function selectUT(ut) {
+            clearSelection('.ut-btn');
+            document.getElementById('field-ut').value = ut;
+            event.target.classList.remove('border-zinc-800', 'bg-zinc-950/40', 'text-zinc-300');
+            event.target.classList.add('border-zinc-300', 'bg-zinc-800', 'text-white');
+        }
+
+        function selectReal(outcome) {
+            clearSelection('.real-btn');
+            document.getElementById('field-real').value = outcome;
+            let target = event.target.closest('button');
+            target.classList.remove('border-zinc-800', 'bg-zinc-950/40');
+            if (outcome.includes('TP') || outcome.includes('Partiel')) {
+                target.classList.add('border-emerald-500', 'bg-emerald-950/10');
+            } else {
+                target.classList.add('border-rose-500', 'bg-rose-950/10');
+            }
+        }
+
+        function selectTheo(scenario) {
+            clearSelection('.theo-btn');
+            document.getElementById('field-theo').value = scenario;
+            event.target.classList.remove('border-zinc-800', 'bg-zinc-950/40', 'text-zinc-300');
+            if (scenario === 'TP') {
+                event.target.classList.add('border-emerald-500', 'bg-emerald-950/10', 'text-white');
+            } else {
+                event.target.classList.add('border-rose-500', 'bg-rose-950/10', 'text-white');
+            }
+        }
+
+        // ─── FORM SUBMIT ───────────────────────────────────────────────────────
+        function handleFormSubmit(e) {
+            e.preventDefault();
+
+            const asset       = document.getElementById('field-asset').value;
+            const strategy    = document.getElementById('field-strategy').value;
+            const session     = document.getElementById('field-session').value;
+            const ut          = document.getElementById('field-ut').value;
+            const realOutcome = document.getElementById('field-real').value;
+            const theoOutcome = document.getElementById('field-theo').value;
+            const notes       = document.getElementById('field-notes').value;
+
+            if (!asset || !strategy || !session || !ut || !realOutcome || !theoOutcome) {
+                alert("Veuillez remplir tous les champs en effectuant vos sélections visuelles.");
+                return;
+            }
+
+            const trade = {
+                id: Date.now(),
+                date: new Date().toLocaleDateString('fr-FR', {day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'}),
+                asset, strategy, session, ut, realOutcome, theoOutcome, notes,
+                risk: currentRisk,
+                realPL: getRealPL(realOutcome),
+                theoPL: getTheoPL(theoOutcome),
+                imgHTF: pendingHTF,
+                imgLTF: pendingLTF
+            };
+
+            trades.unshift(trade);
+            localStorage.setItem('cosmos_trades', JSON.stringify(trades));
+
+            // Reset
+            document.getElementById('trade-form').reset();
+            ['asset-btn','strat-btn','session-btn','ut-btn','real-btn','theo-btn'].forEach(c => clearSelection('.' + c));
+            ['field-asset','field-strategy','field-session','field-ut','field-real','field-theo'].forEach(id => {
+                document.getElementById(id).value = '';
+            });
+            // Reset media zones
+            ['htf','ltf'].forEach(t => {
+                const z = document.getElementById('zone-' + t);
+                const img = z.querySelector('img.preview-img');
+                if (img) img.remove();
+                z.classList.remove('has-img');
+                const ph = document.getElementById('zone-' + t + '-placeholder');
+                if (ph) ph.style.display = '';
+                document.getElementById('upload-' + t).value = '';
+            });
+            pendingHTF = null;
+            pendingLTF = null;
+
+            updateUI();
+        }
+
+        // ─── DELETE / CLEAR ────────────────────────────────────────────────────
+        function deleteTrade(id) {
+            trades = trades.filter(t => t.id !== id);
+            localStorage.setItem('cosmos_trades', JSON.stringify(trades));
+            updateUI();
+        }
+
+        function clearAllData() {
+            if (confirm("Attention : Voulez-vous vraiment vider l'ensemble du journal de trading ?")) {
+                trades = [];
+                localStorage.removeItem('cosmos_trades');
+                updateUI();
+            }
+        }
+
+        // ─── UPDATE UI ─────────────────────────────────────────────────────────
+        function updateUI() {
+            const listContainer  = document.getElementById('trades-list');
+            const countContainer = document.getElementById('trade-count');
+            let totalReal = 0, totalTheo = 0;
+
+            if (trades.length === 0) {
+                listContainer.innerHTML = `<tr><td colspan="6" class="px-4 py-12 text-center text-zinc-500 text-xs">Aucun trade pour le moment. Remplissez le formulaire ou injectez de la démo.</td></tr>`;
+                countContainer.textContent = "0 trade enregistré";
+                document.getElementById('stat-real-pl').textContent = "0.00%";
+                document.getElementById('stat-theo-pl').textContent = "0.00%";
+                document.getElementById('stat-delta').textContent   = "0.00%";
+                document.getElementById('card-delta').className     = "bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 relative overflow-hidden md:col-span-2";
+                document.getElementById('delta-bar').className      = "absolute top-0 left-0 w-1 h-full bg-zinc-600";
+                document.getElementById('delta-emoji').textContent  = "⚖️";
+                document.getElementById('delta-tip').textContent    = "Configurez vos trades pour évaluer l'impact financier net de vos décisions.";
+                return;
+            }
+
+            countContainer.textContent = `${trades.length} trade${trades.length > 1 ? 's' : ''} enregistré${trades.length > 1 ? 's' : ''}`;
+            listContainer.innerHTML = '';
+
+            trades.forEach(trade => {
+                totalReal += trade.realPL;
+                totalTheo += trade.theoPL;
+
+                const delta = trade.realPL - trade.theoPL;
+                let deltaClass = "text-zinc-400", deltaText = "0.00%";
+                if (delta > 0) { deltaClass = "text-emerald-400"; deltaText = `+${delta.toFixed(3)}%`; }
+                else if (delta < 0) { deltaClass = "text-rose-400"; deltaText = `${delta.toFixed(3)}%`; }
+
+                const realClass = trade.realPL > 0 ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30' : 'text-rose-400 bg-rose-950/20 border-rose-900/30';
+                const theoClass = trade.theoPL > 0 ? 'text-emerald-400 bg-emerald-950/20 border-emerald-900/30' : 'text-rose-400 bg-rose-950/20 border-rose-900/30';
+
+                // Media thumbnails inline
+                let mediaCells = '';
+                if (trade.imgHTF || trade.imgLTF) {
+                    mediaCells = `<div class="flex gap-1 mt-1">`;
+                    if (trade.imgHTF) mediaCells += `<img src="${trade.imgHTF}" onclick="openLightbox('${trade.imgHTF}','HTF — ${trade.asset}')" class="w-8 h-8 rounded object-cover cursor-pointer border border-zinc-700 hover:border-emerald-500 transition" title="HTF">`;
+                    if (trade.imgLTF) mediaCells += `<img src="${trade.imgLTF}" onclick="openLightbox('${trade.imgLTF}','LTF — ${trade.asset}')" class="w-8 h-8 rounded object-cover cursor-pointer border border-zinc-700 hover:border-emerald-500 transition" title="LTF">`;
+                    mediaCells += `</div>`;
+                }
+
+                // Risk badge
+                const riskBadge = trade.risk && trade.risk !== 0.25
+                    ? `<span class="text-[8px] font-mono text-zinc-500 ml-1">[${(trade.risk*100).toFixed(0)}bps]</span>`
+                    : '';
+
+                const row = document.createElement('tr');
+                row.className = "hover:bg-zinc-950/20 transition-all duration-150 trade-row-new";
+                row.innerHTML = `
+                    <td class="px-4 py-3.5 whitespace-nowrap">
+                        <div class="text-xs font-semibold text-zinc-200 font-mono">${trade.asset}${riskBadge}</div>
+                        <div class="text-[9px] text-zinc-500 mt-0.5">${trade.date}</div>
+                        ${mediaCells}
+                    </td>
+                    <td class="px-4 py-3.5 whitespace-nowrap">
+                        <div class="text-[11px] text-zinc-300 font-medium">${trade.strategy}</div>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="text-[9px] text-zinc-400 bg-zinc-800 px-1 py-0.5 rounded">${trade.session}</span>
+                            <span class="text-[9px] text-zinc-400 font-mono">${trade.ut}</span>
+                        </div>
+                    </td>
+                    <td class="px-4 py-3.5 whitespace-nowrap text-center">
+                        <span class="inline-block text-[10px] font-mono font-medium px-2 py-0.5 rounded border ${realClass}">
+                            ${trade.realPL > 0 ? '+' : ''}${trade.realPL.toFixed(3)}%
+                        </span>
+                        <div class="text-[8px] text-zinc-500 mt-1">${trade.realOutcome}</div>
+                    </td>
+                    <td class="px-4 py-3.5 whitespace-nowrap text-center">
+                        <span class="inline-block text-[10px] font-mono px-2 py-0.5 rounded border ${theoClass}">
+                            ${trade.theoPL > 0 ? '+' : ''}${trade.theoPL.toFixed(3)}%
+                        </span>
+                        <div class="text-[8px] text-zinc-500 mt-1">${trade.theoOutcome === 'TP' ? 'Touché TP' : 'Touché SL'}</div>
+                    </td>
+                    <td class="px-4 py-3.5 whitespace-nowrap text-right font-mono text-xs font-medium ${deltaClass}">${deltaText}</td>
+                    <td class="px-4 py-3.5 whitespace-nowrap text-right text-xs">
+                        <button onclick="deleteTrade(${trade.id})" class="text-zinc-600 hover:text-rose-400 transition ml-2">✕</button>
+                    </td>`;
+
+                if (trade.notes) {
+                    const notesRow = document.createElement('tr');
+                    notesRow.className = "bg-zinc-950/10";
+                    notesRow.innerHTML = `<td colspan="6" class="px-4 py-1.5 text-[10px] text-zinc-400 italic font-sans border-t-0">📝 <span class="text-zinc-500">Note :</span> "${trade.notes}"</td>`;
+                    listContainer.appendChild(row);
+                    listContainer.appendChild(notesRow);
+                } else {
+                    listContainer.appendChild(row);
+                }
+            });
+
+            // Stats KPI
+            document.getElementById('stat-real-pl').textContent = (totalReal >= 0 ? '+' : '') + totalReal.toFixed(3) + '%';
+            document.getElementById('stat-real-pl').className   = totalReal >= 0 ? 'text-3xl font-semibold tracking-tight text-emerald-400' : 'text-3xl font-semibold tracking-tight text-rose-400';
+            document.getElementById('stat-theo-pl').textContent = (totalTheo >= 0 ? '+' : '') + totalTheo.toFixed(3) + '%';
+
+            const globalDelta = totalReal - totalTheo;
+            const deltaElem   = document.getElementById('stat-delta');
+            const cardDelta   = document.getElementById('card-delta');
+            const deltaBar    = document.getElementById('delta-bar');
+            const deltaEmoji  = document.getElementById('delta-emoji');
+            const deltaTip    = document.getElementById('delta-tip');
+
+            deltaElem.textContent = (globalDelta >= 0 ? '+' : '') + globalDelta.toFixed(3) + '%';
+
+            if (globalDelta > 0) {
+                deltaElem.className = "text-3xl font-semibold tracking-tight text-emerald-400";
+                cardDelta.className = "bg-emerald-950/10 border border-emerald-900/30 rounded-2xl p-5 relative overflow-hidden md:col-span-2";
+                deltaBar.className  = "absolute top-0 left-0 w-1 h-full bg-emerald-500";
+                deltaEmoji.textContent = "📈";
+                deltaTip.textContent   = "Incroyable ! Vos coupures manuelles et prises de profit protègent réellement votre capital sur cette série.";
+            } else if (globalDelta < 0) {
+                deltaElem.className = "text-3xl font-semibold tracking-tight text-rose-400";
+                cardDelta.className = "bg-rose-950/10 border border-rose-900/30 rounded-2xl p-5 relative overflow-hidden md:col-span-2";
+                deltaBar.className  = "absolute top-0 left-0 w-1 h-full bg-rose-500";
+                deltaEmoji.textContent = "📉";
+                deltaTip.textContent   = "La peur a un coût. Le manque à gagner de vos interventions manuelles nuit à vos mathématiques d'exécution.";
+            } else {
+                deltaElem.className = "text-3xl font-semibold tracking-tight text-zinc-300";
+                cardDelta.className = "bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-5 relative overflow-hidden md:col-span-2";
+                deltaBar.className  = "absolute top-0 left-0 w-1 h-full bg-zinc-600";
+                deltaEmoji.textContent = "⚖️";
+                deltaTip.textContent   = "Parfaite égalité. Votre exécution réplique idéalement les probabilités du marché.";
+            }
+        }
+
+        // ─── DEMO DATA ─────────────────────────────────────────────────────────
+        function injectDemoData() {
+            const demoTrades = [
+                { id:1, date:"28 juin, 02:15", asset:"EUR/USD", strategy:"Strat 2 - OB/POC/LIQ", session:"New York", ut:"30M", realOutcome:"Partiel + BE", theoOutcome:"TP", notes:"Le sniper s'est déclenché parfaitement puis est remonté. J'ai pris mon partiel à RR1 mais il est revenu me stopper sur mon BE. L'objectif final à RR2 a finalement été touché 2h après.", risk:0.25, realPL:0.125, theoPL:0.50, imgHTF:null, imgLTF:null },
+                { id:2, date:"27 juin, 11:30", asset:"GBP/USD", strategy:"Strat 1 - OB/BPR",     session:"Londres",  ut:"15M", realOutcome:"Moitié SL",    theoOutcome:"SL", notes:"Le marché a consolidé lourdement sous le BPR. J'ai coupé manuellement par peur. Bonne décision cette fois.", risk:0.25, realPL:-0.125, theoPL:-0.25, imgHTF:null, imgLTF:null },
+                { id:3, date:"26 juin, 15:00", asset:"BTC/USD", strategy:"Strat 2 - OB/POC/LIQ", session:"New York", ut:"1H", realOutcome:"TP Max",       theoOutcome:"TP", notes:"Chasse institutionnelle propre sous le POC. Zéro stress, +0.50% propre.", risk:0.25, realPL:0.50, theoPL:0.50, imgHTF:null, imgLTF:null },
+                { id:4, date:"25 juin, 09:45", asset:"XAU/USD", strategy:"Strat 1 - OB/BPR",     session:"Londres",  ut:"30M", realOutcome:"Moitié SL",    theoOutcome:"TP", notes:"Énorme erreur émotionnelle. J'ai coupé à 50% de drawdown. Si j'étais resté passif, le TP à RR2 était touché.", risk:0.25, realPL:-0.125, theoPL:0.50, imgHTF:null, imgLTF:null }
+            ];
+            trades = demoTrades;
+            localStorage.setItem('cosmos_trades', JSON.stringify(trades));
+            updateUI();
+        }
+
+        // ─── EXPORT MODAL ──────────────────────────────────────────────────────
+        function openExportModal() {
+            if (trades.length === 0) { alert("Veuillez d'abord enregistrer quelques trades."); return; }
+            let totalReal=0, totalTheo=0, countRealTP=0, countRealPartiel=0, countRealHalfSL=0, countRealFullSL=0, countTheoTP=0, countTheoSL=0;
+            trades.forEach(t => {
+                totalReal += t.realPL; totalTheo += t.theoPL;
+                if(t.realOutcome==='TP Max') countRealTP++;
+                if(t.realOutcome==='Partiel + BE') countRealPartiel++;
+                if(t.realOutcome==='Moitié SL') countRealHalfSL++;
+                if(t.realOutcome==='Full SL') countRealFullSL++;
+                if(t.theoOutcome==='TP') countTheoTP++;
+                if(t.theoOutcome==='SL') countTheoSL++;
+            });
+            const delta = totalReal - totalTheo;
+            let report = `# RAPPORT D'AUDIT COMPORTEMENTAL\nGénéré le : ${new Date().toLocaleDateString('fr-FR')} | Source : Cosmos Journal Pro v2.0\n\n`;
+            report += `## 📊 INDICATEURS GLOBAUX\n- Trades analysés : ${trades.length}\n- P&L Réel : ${totalReal.toFixed(3)}%\n- P&L Théorique : ${totalTheo.toFixed(3)}%\n- **DELTA ÉMOTIONNEL : ${delta.toFixed(3)}%**\n\n`;
+            report += `## 🔎 EXÉCUTION RÉELLE\n- TP Max : ${countRealTP} (${((countRealTP/trades.length)*100).toFixed(1)}%)\n- Partiel+BE : ${countRealPartiel} (${((countRealPartiel/trades.length)*100).toFixed(1)}%)\n- Mi-SL : ${countRealHalfSL} (${((countRealHalfSL/trades.length)*100).toFixed(1)}%)\n- Full SL : ${countRealFullSL} (${((countRealFullSL/trades.length)*100).toFixed(1)}%)\n\n`;
+            report += delta < 0 ? `⚠️ VERDICT : VOS ACTIONS MANUELLES VOUS COÛTENT DE L'ARGENT.\n` : `✅ VERDICT : VOS DÉCISIONS ACTIVES AMÉLIORENT LA PERFORMANCE.\n`;
+            report += `\n## 📋 JOURNAL DÉTAILLÉ\n`;
+            trades.forEach((t,i) => {
+                report += `### Trade #${trades.length-i} — ${t.asset} [${t.strategy}]\n`;
+                report += `- Risque appliqué : ${(t.risk*100).toFixed(2)} bps | Session : ${t.session} | UT : ${t.ut}\n`;
+                report += `- Réel : ${t.realOutcome} (${t.realPL>0?'+':''}${t.realPL.toFixed(3)}%) | Théorique : ${t.theoOutcome==='TP'?'TP':'SL'} (${t.theoPL>0?'+':''}${t.theoPL.toFixed(3)}%)\n`;
+                if(t.notes) report += `- Notes : "${t.notes}"\n`;
+                report += `\n`;
+            });
+            document.getElementById('export-text').value = report;
+            document.getElementById('export-modal').classList.remove('hidden');
+        }
+
+        function closeExportModal() { document.getElementById('export-modal').classList.add('hidden'); }
+
+        function copyToClipboard() {
+            const t = document.getElementById("export-text");
+            t.select(); t.setSelectionRange(0,99999);
+            document.execCommand("copy");
+            alert("Rapport copié — collez-le dans Cosmos Trader Pro.");
+            closeExportModal();
+        }
+
+        // ESC global
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') { closeLightbox(); closeSettings(); closeExportModal(); }
+        });
+    </script>
+</body>
+</html>
